@@ -1,0 +1,21 @@
+services:
+  ai-service:
+    build: ./ai_service
+    ports:
+      - "8000:8000"
+    environment:
+      allow_origins: '["http://localhost:3000", "http://parking-spot-interface:3000"]'
+      allow_methods: '["*"]'
+      allow_headers: '["*"]'
+
+  parking-spot-interface:
+    build:
+      context: ./parking_spot_interface
+      args:
+        BACKEND_URL: http://ai-service:8000
+    ports:
+      - "3000:3000"
+    environment:
+      BACKEND_URL: http://ai-service:8000
+    depends_on:
+      - ai-service

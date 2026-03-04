@@ -5,6 +5,16 @@
 import "./src/env.js";
 
 /** @type {import("next").NextConfig} */
-const config = {};
+const config = {
+  output: "standalone",
+  async rewrites() {
+    return [
+      {
+        source: "/api/backend/:path*",
+        destination: `${process.env.BACKEND_URL ?? "http://localhost:8000"}/:path*`,
+      },
+    ];
+  },
+};
 
 export default config;
