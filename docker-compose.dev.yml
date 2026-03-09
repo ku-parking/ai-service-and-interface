@@ -7,21 +7,22 @@ services:
       allow_origins: '["http://localhost:3000", "http://parking-spot-interface:3000"]'
       allow_methods: '["*"]'
       allow_headers: '["*"]'
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/parking_spot_db
+    volumes:
+      - ./ai_service:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - postgres
 
   parking-spot-interface:
     build:
       context: ./parking_spot_interface
-      args:
-        BACKEND_URL: http://ai-service:8000
-        DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
+      target: deps
     ports:
       - "3000:3000"
     environment:
       BACKEND_URL: http://ai-service:8000
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/parking_spot_db
       S3_ENDPOINT: http://localstack:4566
       S3_BUCKET: parking-spot-images
       AWS_ACCESS_KEY_ID: test
@@ -30,6 +31,11 @@ services:
       - ai-service
       - postgres
       - localstack
+    volumes:
+      - ./parking_spot_interface:/app
+      - /app/node_modules
+    command: sh -c "pnpm run dev"
+    working_dir: /app
 
   postgres:
     image: postgres
@@ -38,7 +44,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
+      POSTGRES_DB: parking_spot_db
     volumes:
       - ./postgres_data:/var/lib/postgresql
 
@@ -48,6 +54,5 @@ services:
       - "4566:4566"
     environment:
       SERVICES: s3
-      DEFAULT_REGION: us-east-1
     volumes:
       - ./localstack_data:/var/lib/localstack

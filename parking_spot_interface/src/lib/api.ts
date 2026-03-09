@@ -28,10 +28,26 @@ export interface InitResponse {
   spots: Detection[];
 }
 
+export interface SpotOccupancy {
+  id: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  occupied: boolean;
+}
+
+export interface FrameResponse {
+  spots: SpotOccupancy[];
+  total: number;
+  occupied: number;
+  available: number;
+}
+
 /* ── API calls ──────────────────────────────────────────────────────── */
 
 /**
- * Send the initial frame to the backend.
+ * Send the initial frame to the AI service.
  * Returns detected parking-spot bounding boxes.
  */
 export async function initParkingSpots(
@@ -53,27 +69,41 @@ export async function initParkingSpots(
 }
 
 /**
- * Save the finalised parking-spot definitions to the backend.
+ * Save parking spot area (name + image + coordinates) to the database via Next.js API.
  */
-export async function saveSpots(spots: EditableSpot[]): Promise<void> {
-  const res = await fetch(`${BACKEND_URL}/spots`, {
+export async function saveParkingSpot(
+  name: string,
+  imageBlob: Blob,
+  spots: BoundingBox[],
+): Promise<{ id: number }> {
+  const form = new FormData();
+  form.append("name", name);
+  form.append("image", imageBlob, "parking_area.jpg");
+  form.append("spots", JSON.stringify(spots));
+
+  const res = await fetch("/api/parking-spots", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ spots }),
+    body: form,
   });
 
   if (!res.ok) {
-    throw new Error(`Save spots failed: ${res.status} ${res.statusText}`);
+    throw new Error(`Save failed: ${res.status} ${res.statusText}`);
   }
+
+  return (await res.json()) as { id: number };
 }
 
 /**
- * Send a monitoring frame to the backend.
- * Fire-and-forget – we don't need the response on the frontend.
+ * Send a monitoring frame to the AI service.
+ * Returns per-spot occupancy status and summary counts.
  */
-export async function sendFrame(frameBlob: Blob): Promise<void> {
+export async function sendFrame(
+  frameBlob: Blob,
+  parkingSpotId: number,
+): Promise<FrameResponse> {
   const form = new FormData();
   form.append("frame", frameBlob, "frame.jpg");
+  form.append("parking_spot_id", String(parkingSpotId));
 
   const res = await fetch(`${BACKEND_URL}/frame`, {
     method: "POST",
@@ -83,4 +113,6 @@ export async function sendFrame(frameBlob: Blob): Promise<void> {
   if (!res.ok) {
     throw new Error(`Send frame failed: ${res.status} ${res.statusText}`);
   }
+
+  return (await res.json()) as FrameResponse;
 }

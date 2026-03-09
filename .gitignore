@@ -48,3 +48,8 @@ yarn-error.log*
 
 venv
 __pycache__
+
+# Docker volumes
+postgres_data
+localstack_data
+postgres_data

@@ -9,9 +9,10 @@ import {
 } from "react";
 import {
   initParkingSpots,
-  saveSpots,
+  saveParkingSpot,
   sendFrame,
   type EditableSpot,
+  type FrameResponse,
 } from "~/lib/api";
 
 /* ── Types ──────────────────────────────────────────────────────────── */
@@ -115,6 +116,13 @@ export default function ParkingMonitor() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawMode, setDrawMode] = useState(false);
   const [editAction, setEditAction] = useState<EditAction>({ kind: "none" });
+
+  /* save & monitoring */
+  const [areaName, setAreaName] = useState("");
+  const [savedParkingSpotId, setSavedParkingSpotId] = useState<number | null>(null);
+  const [occupancyData, setOccupancyData] = useState<FrameResponse | null>(null);
+  const initFrameBlobRef = useRef<Blob | null>(null);
+  const [saving, setSaving] = useState(false);
 
   /* ── Derived ──────────────────────────────────────────────────────── */
 
@@ -262,6 +270,7 @@ export default function ParkingMonitor() {
         setPhase("setup");
         return;
       }
+      initFrameBlobRef.current = blob;
       setInitPreview(URL.createObjectURL(blob));
       const res = await initParkingSpots(blob);
       const editableSpots: EditableSpot[] = res.spots.map((d) => ({
@@ -301,26 +310,42 @@ export default function ParkingMonitor() {
 
   const handleConfirmSpots = useCallback(async () => {
     setError(null);
-    try {
-      await saveSpots(spots);
-    } catch {
-      // Backend might not have /spots yet — continue anyway
+    if (!areaName.trim()) {
+      setError("Please enter a name for this parking area.");
+      return;
     }
-    setPhase("monitoring");
-  }, [spots]);
+    if (!initFrameBlobRef.current) {
+      setError("No captured frame available. Please re-initialize.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const boxes = spots.map((s) => s.box);
+      const result = await saveParkingSpot(areaName.trim(), initFrameBlobRef.current, boxes);
+      setSavedParkingSpotId(result.id);
+      setPhase("monitoring");
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Failed to save parking spot.");
+    } finally {
+      setSaving(false);
+    }
+  }, [spots, areaName]);
 
   /* ── Phase 4: Continuous frame sending ────────────────────────────── */
 
   const doSendFrame = useCallback(async () => {
+    if (savedParkingSpotId == null) return;
     try {
       const blob = await captureFrame();
       if (!blob) return;
-      await sendFrame(blob);
+      const result = await sendFrame(blob, savedParkingSpotId);
+      setOccupancyData(result);
       setFramesSent((c) => c + 1);
     } catch (err) {
       console.error("Send frame error:", err);
     }
-  }, [captureFrame]);
+  }, [captureFrame, savedParkingSpotId]);
 
   useEffect(() => {
     if (phase !== "monitoring") return;
@@ -351,6 +376,10 @@ export default function ParkingMonitor() {
     setSelectedId(null);
     setFramesSent(0);
     setInitPreview(null);
+    setAreaName("");
+    setSavedParkingSpotId(null);
+    setOccupancyData(null);
+    initFrameBlobRef.current = null;
   }, []);
 
   /* ── Mouse handlers: crop (setup phase) ───────────────────────────── */
@@ -583,6 +612,10 @@ export default function ParkingMonitor() {
   /* ── Render helper: spot overlay ──────────────────────────────────── */
 
   function renderSpotOverlay(interactive: boolean) {
+    const occupancyMap = new Map(
+      occupancyData?.spots.map((s) => [s.id, s.occupied]) ?? [],
+    );
+
     return (
       <svg
         className="pointer-events-none absolute inset-0 h-full w-full"
@@ -593,6 +626,21 @@ export default function ParkingMonitor() {
           const bw = spot.box.x2 - spot.box.x1;
           const bh = spot.box.y2 - spot.box.y1;
           const isSel = interactive && spot.id === selectedId;
+          const isOccupied = occupancyMap.get(idx + 1);
+
+          let fillColor = "rgba(34,197,94,0.2)";
+          let strokeColor = "#22c55e";
+          if (isSel) {
+            fillColor = "rgba(59,130,246,0.25)";
+            strokeColor = "#3b82f6";
+          } else if (isMonitoring && isOccupied === true) {
+            fillColor = "rgba(239,68,68,0.3)";
+            strokeColor = "#ef4444";
+          } else if (isMonitoring && isOccupied === false) {
+            fillColor = "rgba(34,197,94,0.3)";
+            strokeColor = "#22c55e";
+          }
+
           return (
             <g key={spot.id}>
               <rect
@@ -600,10 +648,8 @@ export default function ParkingMonitor() {
                 y={spot.box.y1}
                 width={bw}
                 height={bh}
-                fill={
-                  isSel ? "rgba(59,130,246,0.25)" : "rgba(34,197,94,0.2)"
-                }
-                stroke={isSel ? "#3b82f6" : "#22c55e"}
+                fill={fillColor}
+                stroke={strokeColor}
                 strokeWidth={isSel ? 3 : 2}
                 rx={4}
               />
@@ -616,6 +662,11 @@ export default function ParkingMonitor() {
                 style={{ textShadow: "0 1px 4px rgba(0,0,0,0.9)" }}
               >
                 #{idx + 1}
+                {isMonitoring && isOccupied !== undefined
+                  ? isOccupied
+                    ? " (taken)"
+                    : " (free)"
+                  : ""}
               </text>
               {isSel &&
                 (
@@ -967,6 +1018,17 @@ export default function ParkingMonitor() {
                 to remove.
               </p>
 
+              <label className="mb-1 block text-xs font-medium text-gray-500">
+                Parking Area Name
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Building A - Level 1"
+                value={areaName}
+                onChange={(e) => setAreaName(e.target.value)}
+                className="mb-4 w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+
               <div className="mb-4 flex flex-wrap gap-2">
                 <button
                   className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
@@ -1007,10 +1069,10 @@ export default function ParkingMonitor() {
               <div className="flex gap-3">
                 <button
                   className="flex-1 rounded-lg bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-40"
-                  disabled={spots.length === 0}
+                  disabled={spots.length === 0 || !areaName.trim() || saving}
                   onClick={() => void handleConfirmSpots()}
                 >
-                  Confirm &amp; Start
+                  {saving ? "Saving..." : "Save & Start Monitoring"}
                 </button>
                 <button
                   className="rounded-lg bg-gray-700 px-4 py-3 text-sm font-medium text-gray-200 transition hover:bg-gray-600"
@@ -1025,19 +1087,36 @@ export default function ParkingMonitor() {
           {/* ── Monitoring panel ────────────────────────────────────── */}
           {isMonitoring && (
             <div className="rounded-xl border border-green-800 bg-gray-900 p-5">
-              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-green-400">
-                Streaming
+              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-green-400">
+                Monitoring: {areaName}
               </h2>
+              {savedParkingSpotId && (
+                <p className="mb-4 text-xs text-gray-500">
+                  Parking Area ID: {savedParkingSpotId}
+                </p>
+              )}
 
               <div className="mb-4 grid grid-cols-2 gap-3">
                 <div className="rounded-lg bg-gray-800 p-3 text-center">
-                  <p className="text-2xl font-bold text-blue-400">
-                    {spots.length}
+                  <p className="text-2xl font-bold text-green-400">
+                    {occupancyData?.available ?? spots.length}
                   </p>
-                  <p className="text-xs text-gray-400">Spots Defined</p>
+                  <p className="text-xs text-gray-400">Available</p>
                 </div>
                 <div className="rounded-lg bg-gray-800 p-3 text-center">
-                  <p className="text-2xl font-bold text-green-400">
+                  <p className="text-2xl font-bold text-red-400">
+                    {occupancyData?.occupied ?? 0}
+                  </p>
+                  <p className="text-xs text-gray-400">Occupied</p>
+                </div>
+                <div className="rounded-lg bg-gray-800 p-3 text-center">
+                  <p className="text-2xl font-bold text-blue-400">
+                    {occupancyData?.total ?? spots.length}
+                  </p>
+                  <p className="text-xs text-gray-400">Total Spots</p>
+                </div>
+                <div className="rounded-lg bg-gray-800 p-3 text-center">
+                  <p className="text-2xl font-bold text-gray-300">
                     {framesSent}
                   </p>
                   <p className="text-xs text-gray-400">Frames Sent</p>

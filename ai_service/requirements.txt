@@ -3,3 +3,5 @@ ultralytics
 torch
 torchvision
 python-dotenv
+psycopg2-binary
+pydantic-settings
