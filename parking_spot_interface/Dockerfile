@@ -25,6 +25,7 @@ FROM node:20-alpine AS builder
 # ARG DATABASE_URL server side variable
 # ARG NEXT_PUBLIC_CLIENTVAR client side variable
 ARG BACKEND_URL
+ARG DATABASE_URL
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
