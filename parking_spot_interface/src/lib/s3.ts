@@ -1,6 +1,8 @@
 import {
   S3Client,
   PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
   CreateBucketCommand,
   HeadBucketCommand,
 } from "@aws-sdk/client-s3";
@@ -45,4 +47,18 @@ export async function uploadImage(
     }),
   );
   return `${ENDPOINT}/${BUCKET}/${key}`;
+}
+
+export async function downloadImage(key: string): Promise<Buffer> {
+  await ensureBucket();
+  const response = await s3.send(
+    new GetObjectCommand({ Bucket: BUCKET, Key: key }),
+  );
+  const bytes = await response.Body!.transformToByteArray();
+  return Buffer.from(bytes);
+}
+
+export async function deleteImage(key: string): Promise<void> {
+  await ensureBucket();
+  await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
 }

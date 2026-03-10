@@ -13,7 +13,13 @@ import {
   type EditableSpot,
   type FrameResponse,
 } from "~/lib/api";
-import { saveParkingSpotAction } from "~/lib/actions";
+import {
+  saveParkingSpotAction,
+  updateParkingSpotAction,
+  getParkingSpotsAction,
+  getParkingSpotImageAction,
+  deleteParkingSpotAction,
+} from "~/lib/actions";
 
 /* ── Types ──────────────────────────────────────────────────────────── */
 
@@ -123,6 +129,19 @@ export default function ParkingMonitor() {
   const [occupancyData, setOccupancyData] = useState<FrameResponse | null>(null);
   const initFrameBlobRef = useRef<Blob | null>(null);
   const [saving, setSaving] = useState(false);
+
+  /* saved parking spots dropdown */
+  type SavedParkingSpot = {
+    id: number;
+    name: string;
+    totalAbility: number;
+    imageUrl: string | null;
+    coordinates: { id: number; parkingSpotId: number; x1: number; y1: number; x2: number; y2: number }[];
+  };
+  const [savedSpotsList, setSavedSpotsList] = useState<SavedParkingSpot[]>([]);
+  const [selectedSavedId, setSelectedSavedId] = useState<number | null>(null);
+  const [loadingSaved, setLoadingSaved] = useState(false);
+  const [deletingSaved, setDeletingSaved] = useState(false);
 
   /* ── Derived ──────────────────────────────────────────────────────── */
 
@@ -287,6 +306,78 @@ export default function ParkingMonitor() {
     }
   }, [captureFrame]);
 
+  /* ── Fetch saved parking spots on mount ───────────────────────────── */
+
+  useEffect(() => {
+    getParkingSpotsAction().then((res) => {
+      setSavedSpotsList(res.parkingSpots);
+    }).catch(console.error);
+  }, []);
+
+  /* ── Load a saved parking spot from dropdown ────────────────────── */
+
+  const handleLoadSavedSpot = useCallback(async () => {
+    if (selectedSavedId == null) return;
+    const spot = savedSpotsList.find((s) => s.id === selectedSavedId);
+    if (!spot) return;
+
+    setError(null);
+    setLoadingSaved(true);
+    try {
+      const editableSpots: EditableSpot[] = spot.coordinates.map((c) => ({
+        id: newSpotId(),
+        box: { x1: c.x1, y1: c.y1, x2: c.x2, y2: c.y2 },
+      }));
+      setSpots(editableSpots);
+      setAreaName(spot.name);
+      setSavedParkingSpotId(spot.id);
+
+      if (spot.imageUrl) {
+        const imgRes = await getParkingSpotImageAction(spot.imageUrl);
+        if ("base64" in imgRes && imgRes.base64) {
+          const dataUrl = `data:image/jpeg;base64,${imgRes.base64}`;
+          setInitPreview(dataUrl);
+          const binary = atob(imgRes.base64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          initFrameBlobRef.current = new Blob([bytes], { type: "image/jpeg" });
+        }
+      }
+
+      setPhase("monitoring");
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Failed to load saved spot.");
+    } finally {
+      setLoadingSaved(false);
+    }
+  }, [selectedSavedId, savedSpotsList]);
+
+  /* ── Delete a saved parking spot ────────────────────────────────── */
+
+  const handleDeleteSavedSpot = useCallback(async () => {
+    if (selectedSavedId == null) return;
+    const spot = savedSpotsList.find((s) => s.id === selectedSavedId);
+    if (!spot || !confirm(`Delete "${spot.name}"? This cannot be undone.`)) return;
+
+    setDeletingSaved(true);
+    setError(null);
+    try {
+      const res = await deleteParkingSpotAction(selectedSavedId);
+      if ("error" in res && res.error) {
+        setError(res.error);
+        return;
+      }
+      setSelectedSavedId(null);
+      setSavedSpotsList((prev) => prev.filter((s) => s.id !== selectedSavedId));
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Failed to delete.");
+    } finally {
+      setDeletingSaved(false);
+    }
+  }, [selectedSavedId, savedSpotsList]);
+
   /* ── Phase 2: Editing helpers ─────────────────────────────────────── */
 
   const deleteSpot = useCallback(
@@ -326,7 +417,14 @@ export default function ParkingMonitor() {
       formData.append("image", initFrameBlobRef.current, "parking_area.jpg");
       formData.append("spots", JSON.stringify(boxes));
 
-      const result = await saveParkingSpotAction(formData);
+      let result: { id: number; name: string } | { error: string };
+      if (savedParkingSpotId != null) {
+        formData.append("id", String(savedParkingSpotId));
+        result = await updateParkingSpotAction(formData);
+      } else {
+        result = await saveParkingSpotAction(formData);
+      }
+
       if ("error" in result) {
         setError(result.error ?? "Unknown error");
         return;
@@ -339,7 +437,7 @@ export default function ParkingMonitor() {
     } finally {
       setSaving(false);
     }
-  }, [spots, areaName]);
+  }, [spots, areaName, savedParkingSpotId]);
 
   /* ── Phase 4: Continuous frame sending ────────────────────────────── */
 
@@ -388,7 +486,9 @@ export default function ParkingMonitor() {
     setAreaName("");
     setSavedParkingSpotId(null);
     setOccupancyData(null);
+    setSelectedSavedId(null);
     initFrameBlobRef.current = null;
+    getParkingSpotsAction().then((res) => setSavedSpotsList(res.parkingSpots)).catch(console.error);
   }, []);
 
   /* ── Mouse handlers: crop (setup phase) ───────────────────────────── */
@@ -621,10 +721,6 @@ export default function ParkingMonitor() {
   /* ── Render helper: spot overlay ──────────────────────────────────── */
 
   function renderSpotOverlay(interactive: boolean) {
-    const occupancyMap = new Map(
-      occupancyData?.spots.map((s) => [s.id, s.occupied]) ?? [],
-    );
-
     return (
       <svg
         className="pointer-events-none absolute inset-0 h-full w-full"
@@ -635,7 +731,7 @@ export default function ParkingMonitor() {
           const bw = spot.box.x2 - spot.box.x1;
           const bh = spot.box.y2 - spot.box.y1;
           const isSel = interactive && spot.id === selectedId;
-          const isOccupied = occupancyMap.get(idx + 1);
+          const isOccupied = occupancyData?.spots[idx]?.occupied;
 
           let fillColor = "rgba(34,197,94,0.2)";
           let strokeColor = "#22c55e";
@@ -997,6 +1093,51 @@ export default function ParkingMonitor() {
               >
                 Capture &amp; Initialize
               </button>
+
+              {savedSpotsList.length > 0 && (
+                <>
+                  <div className="my-4 flex items-center gap-3">
+                    <div className="h-px flex-1 bg-gray-700" />
+                    <span className="text-xs font-medium text-gray-500">OR</span>
+                    <div className="h-px flex-1 bg-gray-700" />
+                  </div>
+
+                  <label className="mb-1 block text-xs font-medium text-gray-500">
+                    Load Saved Parking Area
+                  </label>
+                  <select
+                    value={selectedSavedId ?? ""}
+                    onChange={(e) =>
+                      setSelectedSavedId(e.target.value ? Number(e.target.value) : null)
+                    }
+                    className="mb-3 w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm text-gray-100 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="">Select a parking area...</option>
+                    {savedSpotsList.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.totalAbility} spots)
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="flex gap-2">
+                    <button
+                      className="flex-1 rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={selectedSavedId == null || !cameraReady || loadingSaved}
+                      onClick={() => void handleLoadSavedSpot()}
+                    >
+                      {loadingSaved ? "Loading..." : "Load & Monitor"}
+                    </button>
+                    <button
+                      className="rounded-lg bg-red-600/80 px-4 py-3 text-sm font-medium text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={selectedSavedId == null || deletingSaved}
+                      onClick={() => void handleDeleteSavedSpot()}
+                    >
+                      {deletingSaved ? "..." : "Delete"}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -1172,7 +1313,12 @@ export default function ParkingMonitor() {
           {initPreview && (
             <div className="rounded-xl border border-gray-800 bg-gray-900 p-4">
               <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-gray-400">
-                Init Frame {crop ? "(Cropped)" : ""}
+                Reference Frame
+                {crop
+                  ? " (Cropped)"
+                  : initPreview.startsWith("data:")
+                    ? " (From DB)"
+                    : ""}
               </h3>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
