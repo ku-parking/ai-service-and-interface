@@ -69,31 +69,6 @@ export async function initParkingSpots(
 }
 
 /**
- * Save parking spot area (name + image + coordinates) to the database via Next.js API.
- */
-export async function saveParkingSpot(
-  name: string,
-  imageBlob: Blob,
-  spots: BoundingBox[],
-): Promise<{ id: number }> {
-  const form = new FormData();
-  form.append("name", name);
-  form.append("image", imageBlob, "parking_area.jpg");
-  form.append("spots", JSON.stringify(spots));
-
-  const res = await fetch("/api/parking-spots", {
-    method: "POST",
-    body: form,
-  });
-
-  if (!res.ok) {
-    throw new Error(`Save failed: ${res.status} ${res.statusText}`);
-  }
-
-  return (await res.json()) as { id: number };
-}
-
-/**
  * Send a monitoring frame to the AI service.
  * Returns per-spot occupancy status and summary counts.
  */

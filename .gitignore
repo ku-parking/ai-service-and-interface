@@ -53,3 +53,5 @@ __pycache__
 postgres_data
 localstack_data
 postgres_data
+
+ARCHITECTURE.md

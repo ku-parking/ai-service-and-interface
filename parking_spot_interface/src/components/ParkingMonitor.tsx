@@ -9,11 +9,11 @@ import {
 } from "react";
 import {
   initParkingSpots,
-  saveParkingSpot,
   sendFrame,
   type EditableSpot,
   type FrameResponse,
 } from "~/lib/api";
+import { saveParkingSpotAction } from "~/lib/actions";
 
 /* ── Types ──────────────────────────────────────────────────────────── */
 
@@ -321,7 +321,16 @@ export default function ParkingMonitor() {
     setSaving(true);
     try {
       const boxes = spots.map((s) => s.box);
-      const result = await saveParkingSpot(areaName.trim(), initFrameBlobRef.current, boxes);
+      const formData = new FormData();
+      formData.append("name", areaName.trim());
+      formData.append("image", initFrameBlobRef.current, "parking_area.jpg");
+      formData.append("spots", JSON.stringify(boxes));
+
+      const result = await saveParkingSpotAction(formData);
+      if ("error" in result) {
+        setError(result.error ?? "Unknown error");
+        return;
+      }
       setSavedParkingSpotId(result.id);
       setPhase("monitoring");
     } catch (err) {
