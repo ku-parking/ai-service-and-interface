@@ -9,9 +9,18 @@ export async function saveParkingSpotAction(formData: FormData) {
   const name = formData.get("name") as string | null;
   const imageFile = formData.get("image") as File | null;
   const spotsRaw = formData.get("spots") as string | null;
+  const latRaw = formData.get("lat") as string | null;
+  const lngRaw = formData.get("lng") as string | null;
 
-  if (!name || !imageFile || !spotsRaw) {
-    return { error: "name, image, and spots are required" };
+  if (!name || !imageFile || !spotsRaw || !latRaw || !lngRaw) {
+    return { error: "name, image, spots, lat, and lng are required" };
+  }
+
+  const lat = Number(latRaw);
+  const lng = Number(lngRaw);
+
+  if (Number.isNaN(lat) || Number.isNaN(lng)) {
+    return { error: "Invalid latitude or longitude" };
   }
 
   const spots: { x1: number; y1: number; x2: number; y2: number }[] =
@@ -27,6 +36,8 @@ export async function saveParkingSpotAction(formData: FormData) {
       name,
       totalAbility: spots.length,
       imageUrl,
+      lat,
+      long: lng,
     })
     .returning();
 
@@ -54,12 +65,21 @@ export async function updateParkingSpotAction(formData: FormData) {
   const name = formData.get("name") as string | null;
   const imageFile = formData.get("image") as File | null;
   const spotsRaw = formData.get("spots") as string | null;
+  const latRaw = formData.get("lat") as string | null;
+  const lngRaw = formData.get("lng") as string | null;
 
-  if (!idRaw || !name || !imageFile || !spotsRaw) {
-    return { error: "id, name, image, and spots are required" };
+  if (!idRaw || !name || !spotsRaw || !latRaw || !lngRaw) {
+    return { error: "id, name, spots, lat, and lng are required" };
   }
 
   const id = Number(idRaw);
+  const lat = Number(latRaw);
+  const lng = Number(lngRaw);
+
+  if (Number.isNaN(lat) || Number.isNaN(lng)) {
+    return { error: "Invalid latitude or longitude" };
+  }
+
   const spots: { x1: number; y1: number; x2: number; y2: number }[] =
     JSON.parse(spotsRaw);
 
@@ -70,22 +90,26 @@ export async function updateParkingSpotAction(formData: FormData) {
 
   if (!existing) return { error: "Parking spot not found" };
 
-  const imageBuffer = Buffer.from(await imageFile.arrayBuffer());
-  const key = `parking-spots/${Date.now()}-${name.replace(/\s+/g, "_")}.jpg`;
-  const imageUrl = await uploadImage(key, imageBuffer);
+  let imageUrl = existing.imageUrl;
 
-  if (existing.imageUrl) {
-    const bucket = process.env.S3_BUCKET ?? "parking-spot-images";
-    const bucketIdx = existing.imageUrl.indexOf(`/${bucket}/`);
-    if (bucketIdx !== -1) {
-      const oldKey = existing.imageUrl.substring(bucketIdx + `/${bucket}/`.length);
-      await deleteImage(oldKey).catch(() => {});
+  if (imageFile && imageFile.size > 0) {
+    const imageBuffer = Buffer.from(await imageFile.arrayBuffer());
+    const key = `parking-spots/${Date.now()}-${name.replace(/\s+/g, "_")}.jpg`;
+    imageUrl = await uploadImage(key, imageBuffer);
+
+    if (existing.imageUrl) {
+      const bucket = process.env.S3_BUCKET ?? "parking-spot-images";
+      const bucketIdx = existing.imageUrl.indexOf(`/${bucket}/`);
+      if (bucketIdx !== -1) {
+        const oldKey = existing.imageUrl.substring(bucketIdx + `/${bucket}/`.length);
+        await deleteImage(oldKey).catch(() => {});
+      }
     }
   }
 
   await db
     .update(parkingSpot)
-    .set({ name, totalAbility: spots.length, imageUrl })
+    .set({ name, totalAbility: spots.length, imageUrl, lat, long: lng })
     .where(eq(parkingSpot.id, id));
 
   await db.delete(coorAbility).where(eq(coorAbility.parkingSpotId, id));

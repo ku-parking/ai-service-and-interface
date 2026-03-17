@@ -1,0 +1,147 @@
+{
+  "id": "59cc4c5d-1023-46c5-a2ea-25d08ebb9f58",
+  "prevId": "2d9c5bde-6602-488b-9327-21604bf6a48e",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.coor_ability": {
+      "name": "coor_ability",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "parking_spot_id": {
+          "name": "parking_spot_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "x1": {
+          "name": "x1",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "y1": {
+          "name": "y1",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "x2": {
+          "name": "x2",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "y2": {
+          "name": "y2",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "coor_ability_parking_spot_id_parking_spot_id_fk": {
+          "name": "coor_ability_parking_spot_id_parking_spot_id_fk",
+          "tableFrom": "coor_ability",
+          "tableTo": "parking_spot",
+          "columnsFrom": [
+            "parking_spot_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.parking_spot": {
+      "name": "parking_spot",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "total_ability": {
+          "name": "total_ability",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "image_url": {
+          "name": "image_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "lat": {
+          "name": "lat",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "long": {
+          "name": "long",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

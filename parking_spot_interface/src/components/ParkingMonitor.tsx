@@ -7,6 +7,7 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from "react";
+import dynamic from "next/dynamic";
 import {
   initParkingSpots,
   sendFrame,
@@ -20,6 +21,15 @@ import {
   getParkingSpotImageAction,
   deleteParkingSpotAction,
 } from "~/lib/actions";
+
+const MapPicker = dynamic(() => import("~/components/MapPicker"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[280px] items-center justify-center rounded-lg border border-gray-700 bg-gray-800">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-600 border-t-blue-400" />
+    </div>
+  ),
+});
 
 /* ── Types ──────────────────────────────────────────────────────────── */
 
@@ -125,6 +135,8 @@ export default function ParkingMonitor() {
 
   /* save & monitoring */
   const [areaName, setAreaName] = useState("");
+  const [pinLat, setPinLat] = useState<number | null>(null);
+  const [pinLng, setPinLng] = useState<number | null>(null);
   const [savedParkingSpotId, setSavedParkingSpotId] = useState<number | null>(null);
   const [occupancyData, setOccupancyData] = useState<FrameResponse | null>(null);
   const initFrameBlobRef = useRef<Blob | null>(null);
@@ -136,6 +148,8 @@ export default function ParkingMonitor() {
     name: string;
     totalAbility: number;
     imageUrl: string | null;
+    lat: number;
+    long: number;
     coordinates: { id: number; parkingSpotId: number; x1: number; y1: number; x2: number; y2: number }[];
   };
   const [savedSpotsList, setSavedSpotsList] = useState<SavedParkingSpot[]>([]);
@@ -330,6 +344,8 @@ export default function ParkingMonitor() {
       }));
       setSpots(editableSpots);
       setAreaName(spot.name);
+      setPinLat(spot.lat);
+      setPinLng(spot.long);
       setSavedParkingSpotId(spot.id);
 
       if (spot.imageUrl) {
@@ -405,7 +421,12 @@ export default function ParkingMonitor() {
       setError("Please enter a name for this parking area.");
       return;
     }
-    if (!initFrameBlobRef.current) {
+    if (pinLat == null || pinLng == null) {
+      setError("Please pin the parking location on the map.");
+      return;
+    }
+    const isUpdate = savedParkingSpotId != null;
+    if (!isUpdate && !initFrameBlobRef.current) {
       setError("No captured frame available. Please re-initialize.");
       return;
     }
@@ -414,11 +435,15 @@ export default function ParkingMonitor() {
       const boxes = spots.map((s) => s.box);
       const formData = new FormData();
       formData.append("name", areaName.trim());
-      formData.append("image", initFrameBlobRef.current, "parking_area.jpg");
+      if (initFrameBlobRef.current) {
+        formData.append("image", initFrameBlobRef.current, "parking_area.jpg");
+      }
       formData.append("spots", JSON.stringify(boxes));
+      formData.append("lat", String(pinLat));
+      formData.append("lng", String(pinLng));
 
       let result: { id: number; name: string } | { error: string };
-      if (savedParkingSpotId != null) {
+      if (isUpdate) {
         formData.append("id", String(savedParkingSpotId));
         result = await updateParkingSpotAction(formData);
       } else {
@@ -437,7 +462,7 @@ export default function ParkingMonitor() {
     } finally {
       setSaving(false);
     }
-  }, [spots, areaName, savedParkingSpotId]);
+  }, [spots, areaName, pinLat, pinLng, savedParkingSpotId]);
 
   /* ── Phase 4: Continuous frame sending ────────────────────────────── */
 
@@ -484,6 +509,8 @@ export default function ParkingMonitor() {
     setFramesSent(0);
     setInitPreview(null);
     setAreaName("");
+    setPinLat(null);
+    setPinLng(null);
     setSavedParkingSpotId(null);
     setOccupancyData(null);
     setSelectedSavedId(null);
@@ -1179,6 +1206,30 @@ export default function ParkingMonitor() {
                 className="mb-4 w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               />
 
+              <label className="mb-1 block text-xs font-medium text-gray-500">
+                Parking Location
+              </label>
+              <div className="mb-1">
+                <MapPicker
+                  lat={pinLat}
+                  lng={pinLng}
+                  onChange={(lat, lng) => {
+                    setPinLat(lat);
+                    setPinLng(lng);
+                  }}
+                />
+              </div>
+              {pinLat != null && pinLng != null && (
+                <p className="mb-4 text-xs text-gray-500">
+                  {pinLat.toFixed(6)}, {pinLng.toFixed(6)}
+                </p>
+              )}
+              {(pinLat == null || pinLng == null) && (
+                <p className="mb-4 text-xs text-amber-400">
+                  Click on the map to pin the parking area location
+                </p>
+              )}
+
               <div className="mb-4 flex flex-wrap gap-2">
                 <button
                   className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
@@ -1219,7 +1270,7 @@ export default function ParkingMonitor() {
               <div className="flex gap-3">
                 <button
                   className="flex-1 rounded-lg bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-40"
-                  disabled={spots.length === 0 || !areaName.trim() || saving}
+                  disabled={spots.length === 0 || !areaName.trim() || pinLat == null || pinLng == null || saving}
                   onClick={() => void handleConfirmSpots()}
                 >
                   {saving ? "Saving..." : "Save & Start Monitoring"}
