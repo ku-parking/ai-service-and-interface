@@ -1,10 +1,14 @@
-import { integer, serial, text, pgTable, real } from "drizzle-orm/pg-core";
+import { integer, serial, text, pgTable, real, timestamp } from "drizzle-orm/pg-core";
 
 export const parkingSpot = pgTable("parking_spot", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   totalAbility: integer("total_ability").notNull(),
   imageUrl: text("image_url"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  lat: real("lat").notNull().default(0),
+  long: real("long").notNull().default(0),
 });
 
 export const coorAbility = pgTable("coor_ability", {
