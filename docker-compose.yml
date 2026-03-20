@@ -8,8 +8,13 @@ services:
       allow_methods: '["*"]'
       allow_headers: '["*"]'
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
+      REDIS_URL: redis://redis:6379
+      REDIS_OCCUPANCY_TTL_SECONDS: 60
+      CACHE_TTL_SECONDS: 300
+      IOU_THRESHOLD: 0.3
     depends_on:
       - postgres
+      - redis
 
   parking-spot-interface:
     build:
@@ -41,6 +46,11 @@ services:
       POSTGRES_DB: postgres
     volumes:
       - ./postgres_data:/var/lib/postgresql
+
+  redis:
+    image: redis:8-alpine
+    ports:
+      - "6379:6379"
 
   localstack:
     image: localstack/localstack

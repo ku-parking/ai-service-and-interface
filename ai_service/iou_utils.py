@@ -1,4 +1,4 @@
-IOU_THRESHOLD = 0.3
+from setting import get_settings
 
 
 def compute_iou(box_a: dict, box_b: dict) -> float:
@@ -20,7 +20,7 @@ def check_occupancy(
     results = []
     for spot in spot_coords:
         occupied = any(
-            compute_iou(spot, car["box"]) > IOU_THRESHOLD
+            compute_iou(spot, car["box"]) > get_settings().iou_threshold
             for car in car_detections
         )
         results.append({**spot, "occupied": occupied})
