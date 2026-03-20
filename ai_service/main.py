@@ -1,6 +1,7 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import BackgroundTasks, FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
+import json
 import logging
 from io import BytesIO
 from functools import lru_cache
@@ -8,6 +9,7 @@ from setting import Settings
 from predict_utils import _model_predict, _car_detection_predict
 from db import get_spot_coordinates
 from iou_utils import check_occupancy
+from redis_client import get_redis
 
 logging.basicConfig(level=logging.INFO)
 
@@ -46,10 +48,24 @@ async def init(frame: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+REDIS_OCCUPANCY_TTL_SECONDS = 60
+
+
+def _cache_occupancy(parking_spot_id: int, data: dict):
+    """Fire-and-forget: persist the latest occupancy result to Redis."""
+    try:
+        r = get_redis()
+        key = f"occupancy:{parking_spot_id}"
+        r.set(key, json.dumps(data), ex=REDIS_OCCUPANCY_TTL_SECONDS)
+    except Exception as e:
+        logging.warning("Redis write failed (non-fatal): %s", e)
+
+
 @app.post("/frame")
 async def receive_frame(
     frame: UploadFile = File(...),
     parking_spot_id: int = Form(...),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
     Receive a monitoring frame, detect cars, read spot coords from DB,
@@ -70,12 +86,16 @@ async def receive_frame(
         occupancy = check_occupancy(spot_coords, car_results)
         occupied_count = sum(1 for s in occupancy if s["occupied"])
 
-        return {
+        result = {
             "spots": occupancy,
             "total": len(occupancy),
             "occupied": occupied_count,
             "available": len(occupancy) - occupied_count,
         }
+
+        background_tasks.add_task(_cache_occupancy, parking_spot_id, result)
+
+        return result
     except Exception as e:
         logging.error("Frame processing error: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
