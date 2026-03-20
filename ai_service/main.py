@@ -9,7 +9,7 @@ from db import get_spot_coordinates
 from iou_utils import check_occupancy
 from redis_client import get_redis
 from setting import get_settings
-
+from datetime import datetime
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
@@ -84,6 +84,7 @@ async def receive_frame(
             "total": len(occupancy),
             "occupied": occupied_count,
             "available": len(occupancy) - occupied_count,
+            "updated_at": datetime.now().isoformat(),
         }
 
         background_tasks.add_task(_cache_occupancy, parking_spot_id, result)
