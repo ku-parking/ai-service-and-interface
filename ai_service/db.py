@@ -1,21 +1,18 @@
-import os
 import time
 import psycopg2
-
-CACHE_TTL_SECONDS = 300  # 5 minutes
+from setting import get_settings
 
 _cache: dict[int, tuple[float, list[dict]]] = {}
-
 
 def get_spot_coordinates(parking_spot_id: int) -> list[dict]:
     now = time.monotonic()
     cached = _cache.get(parking_spot_id)
     if cached is not None:
         cached_at, data = cached
-        if now - cached_at < CACHE_TTL_SECONDS:
+        if now - cached_at < get_settings().cache_ttl_seconds:
             return data
 
-    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    conn = psycopg2.connect(get_settings().database_url)
     try:
         cur = conn.cursor()
         cur.execute(

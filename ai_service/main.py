@@ -4,21 +4,15 @@ from PIL import Image
 import json
 import logging
 from io import BytesIO
-from functools import lru_cache
-from setting import Settings
 from predict_utils import _model_predict, _car_detection_predict
 from db import get_spot_coordinates
 from iou_utils import check_occupancy
 from redis_client import get_redis
+from setting import get_settings
 
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
-
-
-@lru_cache
-def get_settings():
-    return Settings()
 
 
 app.add_middleware(
@@ -48,7 +42,6 @@ async def init(frame: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-REDIS_OCCUPANCY_TTL_SECONDS = 60
 
 
 def _cache_occupancy(parking_spot_id: int, data: dict):
@@ -56,7 +49,7 @@ def _cache_occupancy(parking_spot_id: int, data: dict):
     try:
         r = get_redis()
         key = f"occupancy:{parking_spot_id}"
-        r.set(key, json.dumps(data), ex=REDIS_OCCUPANCY_TTL_SECONDS)
+        r.set(key, json.dumps(data), ex=get_settings().redis_occupancy_ttl_seconds)
     except Exception as e:
         logging.warning("Redis write failed (non-fatal): %s", e)
 

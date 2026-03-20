@@ -9,6 +9,9 @@ services:
       allow_headers: '["*"]'
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
       REDIS_URL: redis://redis:6379
+      REDIS_OCCUPANCY_TTL_SECONDS: 60
+      CACHE_TTL_SECONDS: 300
+      IOU_THRESHOLD: 0.3
     depends_on:
       - postgres
       - redis
