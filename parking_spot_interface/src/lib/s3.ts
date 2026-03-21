@@ -6,16 +6,16 @@ import {
   CreateBucketCommand,
   HeadBucketCommand,
 } from "@aws-sdk/client-s3";
-
-const BUCKET = process.env.S3_BUCKET ?? "parking-spot-images";
-const ENDPOINT = process.env.S3_ENDPOINT ?? "http://localhost:4566";
+import { env } from "~/env";
+const BUCKET = env.S3_BUCKET;
+const ENDPOINT = env.S3_ENDPOINT;
 
 const s3 = new S3Client({
   endpoint: ENDPOINT,
   region: "us-east-1",
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "test",
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "test",
+    accessKeyId: env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: env.AWS_SECRET_ACCESS_KEY!,
   },
   forcePathStyle: true,
 });

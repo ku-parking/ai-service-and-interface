@@ -26,6 +26,10 @@ FROM node:20-alpine AS builder
 # ARG NEXT_PUBLIC_CLIENTVAR client side variable
 ARG BACKEND_URL
 ARG DATABASE_URL
+ARG S3_ENDPOINT
+ARG S3_BUCKET
+ARG AWS_ACCESS_KEY_ID
+ARG AWS_SECRET_ACCESS_KEY
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
