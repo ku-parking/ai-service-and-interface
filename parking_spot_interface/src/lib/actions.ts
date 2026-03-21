@@ -1,9 +1,44 @@
 "use server";
 
 import { db } from "~/db/drizzle";
-import { parkingSpot, coorAbility } from "~/db/schema";
-import { eq } from "drizzle-orm";
+import { parkingSpot, coorAbility, issueReport } from "~/db/schema";
+import { desc, eq } from "drizzle-orm";
 import { uploadImage, downloadImage, deleteImage } from "~/lib/s3";
+
+type SpotInput = { x1: number; y1: number; x2: number; y2: number };
+
+function parseSpots(spotsRaw: string): SpotInput[] | null {
+  try {
+    const parsed: unknown = JSON.parse(spotsRaw);
+    if (!Array.isArray(parsed)) return null;
+
+    const spots: SpotInput[] = [];
+    for (const spot of parsed) {
+      if (
+        typeof spot !== "object" ||
+        spot === null ||
+        !("x1" in spot) ||
+        !("y1" in spot) ||
+        !("x2" in spot) ||
+        !("y2" in spot)
+      ) {
+        return null;
+      }
+
+      const x1 = Number((spot as Record<string, unknown>).x1);
+      const y1 = Number((spot as Record<string, unknown>).y1);
+      const x2 = Number((spot as Record<string, unknown>).x2);
+      const y2 = Number((spot as Record<string, unknown>).y2);
+      if ([x1, y1, x2, y2].some((value) => Number.isNaN(value))) return null;
+
+      spots.push({ x1, y1, x2, y2 });
+    }
+
+    return spots;
+  } catch {
+    return null;
+  }
+}
 
 export async function saveParkingSpotAction(formData: FormData) {
   const name = formData.get("name") as string | null;
@@ -23,8 +58,10 @@ export async function saveParkingSpotAction(formData: FormData) {
     return { error: "Invalid latitude or longitude" };
   }
 
-  const spots: { x1: number; y1: number; x2: number; y2: number }[] =
-    JSON.parse(spotsRaw);
+  const spots = parseSpots(spotsRaw);
+  if (!spots) {
+    return { error: "Invalid spots payload" };
+  }
 
   const imageBuffer = Buffer.from(await imageFile.arrayBuffer());
   const key = `parking-spots/${Date.now()}-${name.replace(/\s+/g, "_")}.jpg`;
@@ -80,8 +117,10 @@ export async function updateParkingSpotAction(formData: FormData) {
     return { error: "Invalid latitude or longitude" };
   }
 
-  const spots: { x1: number; y1: number; x2: number; y2: number }[] =
-    JSON.parse(spotsRaw);
+  const spots = parseSpots(spotsRaw);
+  if (!spots) {
+    return { error: "Invalid spots payload" };
+  }
 
   const [existing] = await db
     .select()
@@ -102,7 +141,9 @@ export async function updateParkingSpotAction(formData: FormData) {
       const bucketIdx = existing.imageUrl.indexOf(`/${bucket}/`);
       if (bucketIdx !== -1) {
         const oldKey = existing.imageUrl.substring(bucketIdx + `/${bucket}/`.length);
-        await deleteImage(oldKey).catch(() => {});
+        await deleteImage(oldKey).catch((cleanupErr: unknown) => {
+          console.warn("Failed to delete old image", cleanupErr);
+        });
       }
     }
   }
@@ -156,7 +197,9 @@ export async function deleteParkingSpotAction(id: number) {
       const bucketIdx = spot.imageUrl.indexOf(`/${bucket}/`);
       if (bucketIdx !== -1) {
         const key = spot.imageUrl.substring(bucketIdx + `/${bucket}/`.length);
-        await deleteImage(key).catch(() => {});
+        await deleteImage(key).catch((cleanupErr: unknown) => {
+          console.warn("Failed to delete image", cleanupErr);
+        });
       }
     }
 
@@ -181,4 +224,76 @@ export async function getParkingSpotImageAction(imageUrl: string) {
       error: err instanceof Error ? err.message : "Failed to download image",
     };
   }
+}
+
+type IssueReportRow = {
+  id: number;
+  parkingSpotId: number;
+  parkingSpotName: string;
+  reason: string | null;
+  notes: string | null;
+  status: string;
+  source: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export async function getIssueReportsAction() {
+  const rows = await db
+    .select({
+      id: issueReport.id,
+      parkingSpotId: issueReport.parkingSpotId,
+      parkingSpotName: parkingSpot.name,
+      reason: issueReport.reason,
+      notes: issueReport.notes,
+      status: issueReport.status,
+      source: issueReport.source,
+      createdAt: issueReport.createdAt,
+      updatedAt: issueReport.updatedAt,
+    })
+    .from(issueReport)
+    .innerJoin(parkingSpot, eq(issueReport.parkingSpotId, parkingSpot.id))
+    .orderBy(desc(issueReport.createdAt));
+
+  return { issueReports: rows as IssueReportRow[] };
+}
+
+export async function getRecentIssueReportsAction(limit = 5) {
+  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(50, Math.floor(limit))) : 5;
+  const rows = await db
+    .select({
+      id: issueReport.id,
+      parkingSpotId: issueReport.parkingSpotId,
+      parkingSpotName: parkingSpot.name,
+      reason: issueReport.reason,
+      notes: issueReport.notes,
+      status: issueReport.status,
+      source: issueReport.source,
+      createdAt: issueReport.createdAt,
+      updatedAt: issueReport.updatedAt,
+    })
+    .from(issueReport)
+    .innerJoin(parkingSpot, eq(issueReport.parkingSpotId, parkingSpot.id))
+    .orderBy(desc(issueReport.createdAt))
+    .limit(safeLimit);
+
+  return { issueReports: rows as IssueReportRow[] };
+}
+
+export async function updateIssueReportStatusAction(id: number, status: "open" | "closed") {
+  if (!Number.isInteger(id) || id <= 0) {
+    return { error: "Invalid issue report id" };
+  }
+
+  const [updated] = await db
+    .update(issueReport)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(issueReport.id, id))
+    .returning({ id: issueReport.id, status: issueReport.status });
+
+  if (!updated) {
+    return { error: "Issue report not found" };
+  }
+
+  return { success: true, issueReport: updated };
 }

@@ -15,6 +15,13 @@
       "when": 1773734264661,
       "tag": "0001_lying_dorian_gray",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774082574958,
+      "tag": "0002_misty_juggernaut",
+      "breakpoints": true
     }
   ]
 }

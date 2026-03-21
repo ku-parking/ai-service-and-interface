@@ -8,6 +8,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import {
   initParkingSpots,
   sendFrame,
@@ -20,6 +21,8 @@ import {
   getParkingSpotsAction,
   getParkingSpotImageAction,
   deleteParkingSpotAction,
+  getRecentIssueReportsAction,
+  updateIssueReportStatusAction,
 } from "~/lib/actions";
 
 const MapPicker = dynamic(() => import("~/components/MapPicker"), {
@@ -42,6 +45,18 @@ interface CropRegion {
   w: number;
   h: number;
 }
+
+type IssueReportItem = {
+  id: number;
+  parkingSpotId: number;
+  parkingSpotName: string;
+  reason: string | null;
+  notes: string | null;
+  status: string;
+  source: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 type EditAction =
   | { kind: "none" }
@@ -156,6 +171,9 @@ export default function ParkingMonitor() {
   const [selectedSavedId, setSelectedSavedId] = useState<number | null>(null);
   const [loadingSaved, setLoadingSaved] = useState(false);
   const [deletingSaved, setDeletingSaved] = useState(false);
+  const [recentIssueReports, setRecentIssueReports] = useState<IssueReportItem[]>([]);
+  const [loadingIssueReports, setLoadingIssueReports] = useState(false);
+  const [closingIssueReportId, setClosingIssueReportId] = useState<number | null>(null);
 
   /* ── Derived ──────────────────────────────────────────────────────── */
 
@@ -326,6 +344,42 @@ export default function ParkingMonitor() {
     getParkingSpotsAction().then((res) => {
       setSavedSpotsList(res.parkingSpots);
     }).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    setLoadingIssueReports(true);
+    getRecentIssueReportsAction(6)
+      .then((res) => {
+        setRecentIssueReports(res.issueReports as IssueReportItem[]);
+      })
+      .catch((err) => {
+        console.error(err);
+      })
+      .finally(() => {
+        setLoadingIssueReports(false);
+      });
+  }, []);
+
+  const handleCloseIssueReport = useCallback(async (reportId: number) => {
+    setClosingIssueReportId(reportId);
+    try {
+      const result = await updateIssueReportStatusAction(reportId, "closed");
+      if ("error" in result) {
+        setError(result.error ?? "Failed to close issue report");
+        return;
+      }
+      setRecentIssueReports((prev) =>
+        prev.map((report) =>
+          report.id === reportId
+            ? { ...report, status: "closed", updatedAt: new Date() }
+            : report,
+        ),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to close issue report");
+    } finally {
+      setClosingIssueReportId(null);
+    }
   }, []);
 
   /* ── Load a saved parking spot from dropdown ────────────────────── */
@@ -880,6 +934,12 @@ export default function ParkingMonitor() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            href="/issues"
+            className="rounded-lg bg-gray-800 px-3 py-2 text-sm font-medium text-gray-200 transition hover:bg-gray-700"
+          >
+            View Issue Reports
+          </Link>
           <span
             className={`inline-block h-2.5 w-2.5 rounded-full ${
               isMonitoring
@@ -1430,6 +1490,60 @@ export default function ParkingMonitor() {
               </ul>
             </div>
           )}
+
+          <div className="rounded-xl border border-amber-800 bg-gray-900 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-amber-300">
+                Recent Issue Reports
+              </h3>
+              <Link
+                href="/issues"
+                className="text-xs font-medium text-amber-300 underline underline-offset-2"
+              >
+                See all
+              </Link>
+            </div>
+            {loadingIssueReports ? (
+              <p className="text-sm text-gray-400">Loading reports...</p>
+            ) : recentIssueReports.length === 0 ? (
+              <p className="text-sm text-gray-400">No issue reports yet.</p>
+            ) : (
+              <ul className="flex max-h-64 flex-col gap-2 overflow-y-auto">
+                {recentIssueReports.map((report) => (
+                  <li key={report.id} className="rounded-lg bg-gray-800 p-3">
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-medium text-gray-100">
+                        {report.parkingSpotName}
+                      </p>
+                      <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-300">
+                        {report.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      {report.reason ?? "No reason selected"}
+                    </p>
+                    {report.notes && (
+                      <p className="mt-1 line-clamp-2 text-xs text-gray-300">
+                        {report.notes}
+                      </p>
+                    )}
+                    <p className="mt-2 text-[11px] text-gray-500">
+                      {new Date(report.createdAt).toLocaleString()}
+                    </p>
+                    {report.status.toLowerCase() === "open" && (
+                      <button
+                        className="mt-2 rounded bg-gray-700 px-2 py-1 text-xs text-gray-100 transition hover:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={closingIssueReportId === report.id}
+                        onClick={() => void handleCloseIssueReport(report.id)}
+                      >
+                        {closingIssueReportId === report.id ? "Closing..." : "Close"}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           {/* Error display */}
           {error && (

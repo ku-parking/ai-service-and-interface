@@ -21,3 +21,16 @@ export const coorAbility = pgTable("coor_ability", {
   x2: real("x2").notNull(),
   y2: real("y2").notNull(),
 });
+
+export const issueReport = pgTable("issue_report", {
+  id: serial("id").primaryKey(),
+  parkingSpotId: integer("parking_spot_id")
+    .notNull()
+    .references(() => parkingSpot.id),
+  reason: text("reason"),
+  notes: text("notes"),
+  status: text("status").notNull().default("open"),
+  source: text("source").notNull().default("mobile"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
