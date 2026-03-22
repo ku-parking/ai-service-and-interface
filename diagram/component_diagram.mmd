@@ -1,0 +1,39 @@
+flowchart TD
+    %% Shapes:
+    %% [(...)] = Database shape
+    %% [/"..."/] = Data/Storage shape for flat files
+
+    subgraph Storage [Data Sources / File Storage]
+        ModelFiles[/"YOLO Weight Files (*.pt)"/]
+        VideoFrames[/"Input Video Frames"/]
+    end
+
+    subgraph PythonScripts [Python AI Scripts]
+        MainApp["main.py (FastAPI App)"]
+        PredictUtils["predict_utils.py (Model Inference)"]
+        DBUtils["db.py (Postgres Client)"]
+        IoUUtils["iou_utils.py (Logic Engine)"]
+        RedisUtils["redis_client.py (Redis Client)"]
+    end
+
+    subgraph DatabaseLayer [Databases]
+        PgDB[(PostgreSQL Database)]
+        RedisDB[(Redis Cache)]
+    end
+
+    %% Data Flow Direction: Data Files -> Scripts
+    ModelFiles -->|Loads model weights| PredictUtils
+    VideoFrames -->|Uploads frame stream| MainApp
+
+    %% Internal Data Flow within Scripts
+    MainApp -->|Passes Image Matrix| PredictUtils
+    PredictUtils -->|Returns Car Detections| MainApp
+    
+    MainApp -->|Requests Coordinates| DBUtils
+    MainApp -->|Calculates Occupancy| IoUUtils
+    IoUUtils -->|Returns Status| MainApp
+    MainApp -->|Fire & Forget Status| RedisUtils
+
+    %% Data Flow Direction: Scripts <--> Databases
+    PgDB -->|Provides Spot Coordinates| DBUtils
+    RedisUtils -->|SET EX (JSON state)| RedisDB

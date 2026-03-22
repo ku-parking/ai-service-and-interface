@@ -1,0 +1,89 @@
+classDiagram
+  class ParkingSpot {
+    +int id
+    +string name
+    +int totalAbility
+    +string imageUrl
+    +float lat
+    +float long
+    +Date createdAt
+    +Date updatedAt
+  }
+
+  class Coordinate {
+    <<Entity>>
+    +int id
+    +int parkingSpotId
+    +float x1
+    +float y1
+    +float x2
+    +float y2
+  }
+
+  class IssueReport {
+    <<Entity>>
+    +int id
+    +int parkingSpotId
+    +string reason
+    +string notes
+    +string status
+    +string source
+    +Date createdAt
+    +Date updatedAt
+  }
+
+  class BoundingBox {
+    <<Interface>>
+    +float x1
+    +float y1
+    +float x2
+    +float y2
+  }
+
+  class Detection {
+    <<Interface>>
+    +string name
+    +int class
+    +float confidence
+    +BoundingBox box
+  }
+
+  class SpotOccupancy {
+    <<Interface>>
+    +int id
+    +float x1
+    +float y1
+    +float x2
+    +float y2
+    +boolean occupied
+  }
+
+  class ParkingSpotService {
+    <<Controller/Action>>
+    +saveParkingSpotAction(formData: FormData)
+    +updateParkingSpotAction(formData: FormData)
+    +getParkingSpotsAction()
+    +deleteParkingSpotAction(id: number)
+    +getParkingSpotImageAction(imageUrl: string)
+  }
+
+  class IssueReportService {
+    <<Controller/Action>>
+    +getIssueReportsAction()
+    +getRecentIssueReportsAction(limit: number)
+    +updateIssueReportStatusAction(id: number, status: string)
+  }
+
+  class AIServiceAPI {
+    <<Service>>
+    +initParkingSpots(frameBlob: Blob)
+    +sendFrame(frameBlob: Blob, parkingSpotId: number)
+  }
+
+  ParkingSpot "1" *-- "0..*" Coordinate : contains
+  ParkingSpot "1" *-- "0..*" IssueReport : has issues
+  Detection "1" *-- "1" BoundingBox : uses
+  AIServiceAPI ..> Detection : yields during init
+  AIServiceAPI ..> SpotOccupancy : yields per frame
+  ParkingSpotService ..> ParkingSpot : manages
+  IssueReportService ..> IssueReport : manages

@@ -1,0 +1,63 @@
+classDiagram
+    direction TB
+
+    %% Aggregate Root
+    class ParkingArea {
+        <<Aggregate Root>>
+        +string id
+        +string name
+        +int totalCapacity
+        +string imageUrl
+        +registerIssue(IssueReport)
+        +updateOccupancy(DetectionResult)
+    }
+
+    %% Entities
+    class ParkingSpace {
+        <<Entity>>
+        +string id
+        +boolean isOccupied
+        +markOccupied()
+        +markVacant()
+    }
+
+    class IssueReport {
+        <<Entity>>
+        +string id
+        +string reason
+        +string details
+        +string status
+        +string reporterSource
+        +resolve()
+    }
+
+    %% Value Objects
+    class GeoLocation {
+        <<Value Object>>
+        +float latitude
+        +float longitude
+    }
+
+    class BoundingBox {
+        <<Value Object>>
+        +float x1
+        +float y1
+        +float x2
+        +float y2
+    }
+
+    class DetectionResult {
+        <<Value Object>>
+        +string objectClass
+        +float confidence
+    }
+
+    %% Relationships
+    ParkingArea "1" *-- "many" ParkingSpace : owns
+    ParkingArea "1" *-- "many" IssueReport : tracks
+    ParkingArea "1" --> "1" GeoLocation : located at
+
+    ParkingSpace "1" --> "1" BoundingBox : defined by
+    DetectionResult "1" --> "1" BoundingBox : bound by
+
+    DetectionResult "*" ..> "1" ParkingSpace : determines status
