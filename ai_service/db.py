@@ -4,6 +4,10 @@ from setting import get_settings
 
 _cache: dict[int, tuple[float, list[dict]]] = {}
 
+
+def clear_cache() -> None:
+    _cache.clear()
+
 def get_spot_coordinates(parking_spot_id: int) -> list[dict]:
     now = time.monotonic()
     cached = _cache.get(parking_spot_id)

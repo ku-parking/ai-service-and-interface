@@ -11,3 +11,8 @@ def get_redis() -> redis.Redis:
             decode_responses=True,
         )
     return _client
+
+
+def reset_redis_client() -> None:
+    global _client
+    _client = None

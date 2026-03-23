@@ -24,6 +24,7 @@ services:
       REDIS_OCCUPANCY_TTL_SECONDS: 60
       CACHE_TTL_SECONDS: 300
       IOU_THRESHOLD: 0.3
+      MOCK_DETECTION: ${MOCK_DETECTION:-0}
     depends_on:
       - postgres
       - redis

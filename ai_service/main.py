@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 import json
 import logging
+import os
 from io import BytesIO
-from predict_utils import _model_predict, _car_detection_predict
 from db import get_spot_coordinates
 from iou_utils import check_occupancy
 from redis_client import get_redis
@@ -24,6 +24,24 @@ app.add_middleware(
 )
 
 
+def _detect_parking_spots(image: Image.Image) -> list[dict]:
+    if os.getenv("MOCK_DETECTION", "0") == "1":
+        return [{"id": 1, "x1": 1, "y1": 1, "x2": 6, "y2": 6}]
+
+    from predict_utils import _model_predict
+
+    return _model_predict(image)
+
+
+def _detect_cars(image: Image.Image) -> list[dict]:
+    if os.getenv("MOCK_DETECTION", "0") == "1":
+        return [{"box": {"x1": 1, "y1": 1, "x2": 6, "y2": 6}}]
+
+    from predict_utils import _car_detection_predict
+
+    return _car_detection_predict(image)
+
+
 @app.get("/")
 async def root():
     return {"message": "KU PARKING SPOT MANAGEMENT SYSTEM"}
@@ -34,7 +52,7 @@ async def init(frame: UploadFile = File(...)):
     """Send an initial frame to detect parking spots via YOLO."""
     try:
         image = Image.open(BytesIO(await frame.read()))
-        spots = _model_predict(image)
+        spots = _detect_parking_spots(image)
         logging.info("Spots detected: %s", len(spots))
         return {"spots": spots}
     except Exception as e:
@@ -66,7 +84,7 @@ async def receive_frame(
     """
     try:
         image = Image.open(BytesIO(await frame.read()))
-        car_results = _car_detection_predict(image)
+        car_results = _detect_cars(image)
         logging.info("Cars detected: %s", len(car_results))
 
         spot_coords = get_spot_coordinates(parking_spot_id)
