@@ -59,6 +59,6 @@ GitHub Actions runs:
 
 - `ai_service` tests
 - `parking_spot_interface` tests
-- full-stack compose integration tests (manual `workflow_dispatch`)
+- full-stack compose integration tests
 
 The full integration job automatically skips mobile-backend checks when `mobile_backend` code is not present in the checked-out repository.
