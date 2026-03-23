@@ -1,0 +1,69 @@
+name: Test Suite
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  ai-service-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai_service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install ai_service test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi pillow pydantic-settings redis psycopg2-binary python-multipart pytest pytest-asyncio httpx
+      - name: Run ai_service unit and integration tests
+        run: pytest
+
+  interface-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: parking_spot_interface
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: parking_spot_interface/pnpm-lock.yaml
+      - name: Install interface dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run interface unit tests
+        run: pnpm test
+      - name: Run interface integration tests
+        run: pnpm test:integration
+
+  full-stack-integration:
+    runs-on: ubuntu-latest
+    needs:
+      - ai-service-tests
+      - interface-tests
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Determine mobile backend availability
+        id: mobile
+        run: |
+          if [ -d "mobile_backend" ] && [ -f "mobile_backend/main.go" ]; then
+            echo "skip_mobile=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip_mobile=1" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build and run full stack integration tests
+        env:
+          SKIP_MOBILE_BACKEND: ${{ steps.mobile.outputs.skip_mobile }}
+        run: ./integration/full_stack_test.sh
