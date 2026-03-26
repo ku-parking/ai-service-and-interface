@@ -156,6 +156,7 @@ export async function deleteParkingSpotAction(id: number) {
     if (!spot) return { error: "Parking spot not found" };
 
     await db.delete(coorAbility).where(eq(coorAbility.parkingSpotId, id));
+    await db.delete(issueReport).where(eq(issueReport.parkingSpotId, id));
     await db.delete(parkingSpot).where(eq(parkingSpot.id, id));
 
     if (spot.imageUrl) {
