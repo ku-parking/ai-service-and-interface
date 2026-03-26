@@ -97,6 +97,10 @@ function clamp(val: number, min: number, max: number) {
 }
 
 const HANDLE_SIZE = 10;
+const MIN_FRAME_INTERVAL_SECONDS = 0.5; // fastest
+const DEFAULT_FRAME_INTERVAL_SECONDS = 1; // default
+const MAX_FRAME_INTERVAL_SECONDS = 10; // slowest
+const FRAME_INTERVAL_STEP_SECONDS = 0.5;
 
 function regionFromCorners(
   a: { x: number; y: number },
@@ -125,7 +129,7 @@ export default function ParkingMonitor() {
   const [cameraSource, setCameraSource] = useState<CameraSource>("webcam");
   const [ipUrl, setIpUrl] = useState("");
   const [cameraReady, setCameraReady] = useState(false);
-  const [fps, setFps] = useState(1);
+  const [frameIntervalSec, setFrameIntervalSec] = useState(DEFAULT_FRAME_INTERVAL_SECONDS);
   const [error, setError] = useState<string | null>(null);
   const [initPreview, setInitPreview] = useState<string | null>(null);
   const [framesSent, setFramesSent] = useState(0);
@@ -535,12 +539,14 @@ export default function ParkingMonitor() {
 
   useEffect(() => {
     if (phase !== "monitoring") return;
-    const delayMs = Math.max(100, Math.round(1000 / fps));
+    const delayMs = Math.round(
+      clamp(frameIntervalSec, MIN_FRAME_INTERVAL_SECONDS, MAX_FRAME_INTERVAL_SECONDS) * 1000,
+    );
     intervalRef.current = setInterval(() => void doSendFrame(), delayMs);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [phase, fps, doSendFrame]);
+  }, [phase, frameIntervalSec, doSendFrame]);
 
   useEffect(() => {
     return () => {
@@ -1315,15 +1321,16 @@ export default function ParkingMonitor() {
               </div>
 
               <label className="mb-1 block text-xs font-medium text-gray-500">
-                Stream Rate: {fps} fps
+                Stream Rate: {frameIntervalSec.toFixed(1)} sec/frame (
+                {(1 / frameIntervalSec).toFixed(2)} fps)
               </label>
               <input
                 type="range"
-                min={0.5}
-                max={5}
-                step={0.5}
-                value={fps}
-                onChange={(e) => setFps(Number(e.target.value))}
+                min={MIN_FRAME_INTERVAL_SECONDS}
+                max={MAX_FRAME_INTERVAL_SECONDS}
+                step={FRAME_INTERVAL_STEP_SECONDS}
+                value={frameIntervalSec}
+                onChange={(e) => setFrameIntervalSec(Number(e.target.value))}
                 className="mb-5 w-full accent-blue-500"
               />
 
@@ -1385,15 +1392,16 @@ export default function ParkingMonitor() {
               </div>
 
               <label className="mb-1 block text-xs font-medium text-gray-500">
-                Stream Rate: {fps} fps
+                Stream Rate: {frameIntervalSec.toFixed(1)} sec/frame (
+                {(1 / frameIntervalSec).toFixed(2)} fps)
               </label>
               <input
                 type="range"
-                min={0.5}
-                max={5}
-                step={0.5}
-                value={fps}
-                onChange={(e) => setFps(Number(e.target.value))}
+                min={MIN_FRAME_INTERVAL_SECONDS}
+                max={MAX_FRAME_INTERVAL_SECONDS}
+                step={FRAME_INTERVAL_STEP_SECONDS}
+                value={frameIntervalSec}
+                onChange={(e) => setFrameIntervalSec(Number(e.target.value))}
                 className="mb-5 w-full accent-blue-500"
               />
 
